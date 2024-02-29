@@ -8,7 +8,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/shurcooL/graphql/internal/jsonutil"
+	"github.com/isihu/graphql/internal/jsonutil"
 )
 
 // Client is a GraphQL client.
