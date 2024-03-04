@@ -22,9 +22,52 @@ func TestUnmarshalGraphQL(t *testing.T) {
 		Me struct {
 			Name   graphql.String
 			Height graphql.Float
+			Weight graphql.Float
 		}
 	}
 	var got query
+
+	got.Me.Weight = 140.5
+
+	err := jsonutil.UnmarshalGraphQL([]byte(`{
+		"me": {
+			"name": "Luke Skywalker",
+			"height": 1.72,
+			"weight": 130.5
+		}
+	}`), &got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var want query
+	want.Me.Name = "Luke Skywalker"
+	want.Me.Height = 1.72
+	want.Me.Weight = 130.5
+	if !reflect.DeepEqual(got, want) {
+		t.Error("not equal")
+	}
+}
+
+func TestUnmarshalGraphQL_merge(t *testing.T) {
+	/*
+		query {
+			me {
+				name
+				height
+			}
+		}
+	*/
+	type query struct {
+		Me struct {
+			Name   graphql.String
+			Height graphql.Float
+			Weight graphql.Float
+		}
+	}
+	var got query
+
+	got.Me.Weight = 140.5
+
 	err := jsonutil.UnmarshalGraphQL([]byte(`{
 		"me": {
 			"name": "Luke Skywalker",
@@ -37,6 +80,46 @@ func TestUnmarshalGraphQL(t *testing.T) {
 	var want query
 	want.Me.Name = "Luke Skywalker"
 	want.Me.Height = 1.72
+	want.Me.Weight = 140.5
+	if !reflect.DeepEqual(got, want) {
+		t.Error("not equal")
+	}
+}
+
+func TestUnmarshalGraphQL_overwrite(t *testing.T) {
+	/*
+		query {
+			me {
+				name
+				height
+			}
+		}
+	*/
+	type query struct {
+		Me struct {
+			Name   graphql.String
+			Height graphql.Float
+			Weight graphql.Float
+		}
+	}
+	var got query
+
+	got.Me.Weight = 140.5
+
+	err := jsonutil.UnmarshalGraphQL([]byte(`{
+		"me": {
+			"name": "Luke Skywalker",
+			"height": 1.72,
+			"weight": 130.5
+		}
+	}`), &got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var want query
+	want.Me.Name = "Luke Skywalker"
+	want.Me.Height = 1.72
+	want.Me.Weight = 130.5
 	if !reflect.DeepEqual(got, want) {
 		t.Error("not equal")
 	}
@@ -104,7 +187,7 @@ func TestUnmarshalGraphQL_array(t *testing.T) {
 		Baz: []graphql.String(nil),
 	}
 	if !reflect.DeepEqual(got, want) {
-		t.Error("not equal")
+		t.Error("not equal", got, want)
 	}
 }
 
@@ -117,6 +200,19 @@ func TestUnmarshalGraphQL_arrayReset(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{"bar", "baz"}
+	if !reflect.DeepEqual(got, want) {
+		t.Error("not equal")
+	}
+}
+
+// When unmarshaling into an array, the new values should be appended
+func TestUnmarshalGraphQL_arrayMerge(t *testing.T) {
+	var got = []string{"initial"}
+	err := jsonutil.MergeUnmarshalGraphQL([]byte(`["bar", "baz"]`), &got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"initial", "bar", "baz"}
 	if !reflect.DeepEqual(got, want) {
 		t.Error("not equal")
 	}

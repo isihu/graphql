@@ -34,7 +34,7 @@ func NewClient(url string, httpClient *http.Client) *Client {
 // q should be a pointer to struct that corresponds to the GraphQL schema.
 func (c *Client) Query(ctx context.Context, q any, variables map[string]any) error {
 	query := constructQuery(q, variables)
-	return c.Do(ctx, query, q, variables)
+	return c.Do(ctx, query, q, false, variables)
 }
 
 // Mutate executes a single GraphQL mutation request,
@@ -42,11 +42,11 @@ func (c *Client) Query(ctx context.Context, q any, variables map[string]any) err
 // m should be a pointer to struct that corresponds to the GraphQL schema.
 func (c *Client) Mutate(ctx context.Context, m any, variables map[string]any) error {
 	mutation := constructMutation(m, variables)
-	return c.Do(ctx, mutation, m, variables)
+	return c.Do(ctx, mutation, m, false, variables)
 }
 
 // do executes a single GraphQL operation.
-func (c *Client) Do(ctx context.Context, query string, res any, variables map[string]any) error {
+func (c *Client) Do(ctx context.Context, query string, res any, merge bool, variables map[string]any) error {
 	in := struct {
 		Query     string         `json:"query"`
 		Variables map[string]any `json:"variables,omitempty"`
@@ -84,7 +84,12 @@ func (c *Client) Do(ctx context.Context, query string, res any, variables map[st
 		return err
 	}
 	if out.Data != nil {
-		err := jsonutil.UnmarshalGraphQL(*out.Data, res)
+		if merge {
+			err = jsonutil.MergeUnmarshalGraphQL(*out.Data, res)
+		} else {
+			err = jsonutil.UnmarshalGraphQL(*out.Data, res)
+		}
+
 		if err != nil {
 			// TODO: Consider including response body in returned error, if deemed helpful.
 			return err

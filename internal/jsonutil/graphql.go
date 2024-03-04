@@ -37,6 +37,26 @@ func UnmarshalGraphQL(data []byte, v any) error {
 	}
 }
 
+func MergeUnmarshalGraphQL(data []byte, v any) error {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	err := (&decoder{tokenizer: dec}).MergeDecode(v)
+	if err != nil {
+		return err
+	}
+	tok, err := dec.Token()
+	switch err {
+	case io.EOF:
+		// Expect to get io.EOF. There shouldn't be any more
+		// tokens left after we've decoded v successfully.
+		return nil
+	case nil:
+		return fmt.Errorf("invalid token '%v' after top-level value", tok)
+	default:
+		return err
+	}
+}
+
 // decoder is a JSON decoder that performs custom unmarshaling behavior
 // for GraphQL query data structures. It's implemented on top of a JSON tokenizer.
 type decoder struct {
@@ -58,16 +78,23 @@ type decoder struct {
 
 // Decode decodes a single JSON value from d.tokenizer into v.
 func (d *decoder) Decode(v any) error {
-	rv := reflect.ValueOf(v)
-	if rv.Kind() != reflect.Ptr {
-		return fmt.Errorf("cannot decode into non-pointer %T", v)
-	}
-	d.vs = [][]reflect.Value{{rv.Elem()}}
-	return d.decode()
+	return d.decode(v, false)
+}
+
+// Decode decodes a single JSON value from d.tokenizer into v.
+// New values will be merged into v by appending
+func (d *decoder) MergeDecode(v any) error {
+	return d.decode(v, true)
 }
 
 // decode decodes a single JSON value from d.tokenizer into d.vs.
-func (d *decoder) decode() error {
+func (d *decoder) decode(val any, merge bool) error {
+	rv := reflect.ValueOf(val)
+	if rv.Kind() != reflect.Ptr {
+		return fmt.Errorf("cannot decode into non-pointer %T", val)
+	}
+	d.vs = [][]reflect.Value{{rv.Elem()}}
+
 	// The loop invariant is that the top of each d.vs stack
 	// is where we try to unmarshal the next JSON value we see.
 	for len(d.vs) > 0 {
@@ -198,14 +225,13 @@ func (d *decoder) decode() error {
 					//	v.Set(reflect.New(v.Type().Elem())) // v = new(T).
 					//}
 
-					// Reset slice to empty (in case it had non-zero initial value).
 					if v.Kind() == reflect.Ptr {
 						v = v.Elem()
 					}
-					if v.Kind() != reflect.Slice {
-						continue
+					// Init slice if existing values should be overwritten or it's nil
+					if v.Kind() == reflect.Slice && (!merge || v.IsNil()) {
+						v.Set(reflect.MakeSlice(v.Type(), 0, 0)) // v = make(T, 0, 0).
 					}
-					v.Set(reflect.MakeSlice(v.Type(), 0, 0)) // v = make(T, 0, 0).
 				}
 			case '}', ']':
 				// End of object or array.
